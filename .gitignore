@@ -1,0 +1,39 @@
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+.next/
+
+# Python
+ai-env/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Tauri build
+frontend/src-tauri/target/
+
+# Data runtime
+data/
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Env
+.env
+.env.local
+
+# OS Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
