@@ -32,6 +32,20 @@ Respecte IMPÉRATIVEMENT cette structure :
 Produis UNIQUEMENT le Markdown, sans commentaires ni explications."""
 
 
+def _list_available_models() -> list[str]:
+    """Récupère la liste des modèles installés sur Ollama."""
+    try:
+        req = urllib.request.Request(
+            f"{OLLAMA_BASE_URL}/api/tags",
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        return []
+
+
 def structure_course(raw_text: str) -> str:
     """
     Envoie la transcription à Ollama et retourne le cours en Markdown.
@@ -75,13 +89,33 @@ def structure_course(raw_text: str) -> str:
     try:
         with urllib.request.urlopen(req, timeout=300) as response:
             data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            available = _list_available_models()
+            models_str = ", ".join(available) if available else "(aucun modèle trouvé)"
+            raise ConnectionError(
+                f"Le modèle '{OLLAMA_MODEL}' n'est pas installé sur Ollama. "
+                f"Modèles disponibles : {models_str}. "
+                f"Installe-le avec : ollama pull {OLLAMA_MODEL}"
+            )
+        raise ConnectionError(
+            f"Erreur HTTP {e.code} depuis Ollama : {e.reason}"
+        )
     except urllib.error.URLError as e:
         raise ConnectionError(
             f"Impossible de joindre Ollama sur {OLLAMA_BASE_URL}. "
             f"Lance 'ollama serve' d'abord. Erreur : {e}"
         )
 
-    markdown = data["message"]["content"].strip()
+    # Extraire le contenu (ignorer le champ 'thinking' de deepseek-r1)
+    message = data.get("message", {})
+    markdown = message.get("content", "").strip()
+
+    if not markdown:
+        raise ValueError(
+            f"Ollama a retourné une réponse vide pour le modèle '{OLLAMA_MODEL}'."
+        )
+
     print(f"[llm] Cours généré — {len(markdown)} caractères.", flush=True)
     return markdown
 

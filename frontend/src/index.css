@@ -1,0 +1,92 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family:
+      "Inter",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-surface-950 text-surface-100 min-h-screen overflow-hidden;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-600;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface-900/60 backdrop-blur-xl border border-surface-700/50;
+  }
+
+  .glass-light {
+    @apply bg-surface-800/40 backdrop-blur-lg border border-surface-700/30;
+  }
+
+  .gradient-brand {
+    @apply bg-gradient-to-r from-brand-500 to-brand-400;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-brand-400 to-brand-300 bg-clip-text text-transparent;
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-xl font-semibold text-white 
+           bg-gradient-to-r from-brand-600 to-brand-500 
+           hover:from-brand-500 hover:to-brand-400
+           active:from-brand-700 active:to-brand-600
+           transition-all duration-200 ease-out
+           shadow-lg shadow-brand-500/25 hover:shadow-xl hover:shadow-brand-500/30
+           hover:-translate-y-0.5 active:translate-y-0
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-xl font-semibold
+           bg-surface-800 text-surface-200 border border-surface-700
+           hover:bg-surface-700 hover:border-surface-600 hover:text-white
+           active:bg-surface-800
+           transition-all duration-200 ease-out;
+  }
+
+  .card {
+    @apply glass rounded-2xl p-6 transition-all duration-300;
+  }
+
+  .card-hover {
+    @apply card hover:border-brand-500/30 hover:shadow-lg hover:shadow-brand-500/5;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

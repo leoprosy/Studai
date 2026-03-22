@@ -1,5 +1,8 @@
 use axum::{extract::DefaultBodyLimit, routing::{get, post}, Router};
 use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::{broadcast, RwLock};
+use std::collections::HashMap;
 use tower_http::{
     cors::{Any, CorsLayer},
     limit::RequestBodyLimitLayer,
@@ -10,6 +13,12 @@ use dotenvy::dotenv;
 
 mod handlers;
 mod ai;
+
+// Notre état partagé ("AppState")
+#[derive(Clone)]
+pub struct AppState {
+    pub channels: Arc<RwLock<HashMap<String, broadcast::Sender<String>>>>,
+}
 
 #[tokio::main]
 async fn main() {
@@ -31,6 +40,10 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let state = AppState {
+        channels: Arc::new(RwLock::new(HashMap::new())),
+    };
+
     // Multipart utilise `with_limited_body()` : sans ces couches, la limite Axum reste 2 Mo.
     const MAX_UPLOAD: usize = 500 * 1024 * 1024;
     let transcribe = Router::new()
@@ -43,15 +56,17 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(handlers::health::health_check))
+        .route("/ws", get(handlers::ws::ws_handler))
         .merge(transcribe)
-        .layer(cors);
+        .layer(cors)
+        .with_state(state);
 
     let host = std::env::var("BACKEND_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port = std::env::var("BACKEND_PORT").unwrap_or_else(|_| "8000".to_string());
+    let port = std::env::var("BACKEND_PORT").unwrap_or_else(|_| "8001".to_string());
     let addr: SocketAddr = format!("{}:{}", host, port).parse().expect("Adresse invalide");
 
     info!("Backend demarre sur http://{}", addr);
-    info!("Routes : GET /health | POST /transcribe");
+    info!("Routes : GET /health | POST /transcribe | GET /ws");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

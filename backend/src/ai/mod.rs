@@ -26,12 +26,24 @@ fn setup_python_path(py: Python<'_>) -> Result<()> {
     Ok(())
 }
 
+/// Importe un module Python en forçant le rechargement depuis le fichier source.
+/// Évite le cache de `sys.modules` qui bloquerait les modifications à chaud.
+fn import_fresh_module<'py>(py: Python<'py>, module_name: &str) -> Result<Bound<'py, PyModule>> {
+    setup_python_path(py)?;
+
+    // Supprimer le module du cache sys.modules s'il y est déjà
+    let sys = map_py_err(py.import_bound("sys"))?;
+    let modules = map_py_err(sys.getattr("modules"))?;
+    let _ = modules.call_method1("pop", (module_name,)); // ignore si absent
+
+    // Importer (lecture fraîche du .py)
+    map_py_err(PyModule::import_bound(py, module_name))
+        .with_context(|| format!("Impossible d'importer {module_name}.py"))
+}
+
 pub fn transcribe_audio(audio_path: &str) -> Result<String> {
     Python::with_gil(|py| {
-        setup_python_path(py)?;
-
-        let module = map_py_err(PyModule::import_bound(py, "whisper_bridge"))
-            .context("Impossible d'importer whisper_bridge.py")?;
+        let module = import_fresh_module(py, "whisper_bridge")?;
 
         let transcribe = map_py_err(module.getattr("transcribe"))?;
         let result = map_py_err(transcribe.call1((audio_path,)))
@@ -43,10 +55,7 @@ pub fn transcribe_audio(audio_path: &str) -> Result<String> {
 
 pub fn structure_course(raw_text: &str) -> Result<String> {
     Python::with_gil(|py| {
-        setup_python_path(py)?;
-
-        let module = map_py_err(PyModule::import_bound(py, "llm_bridge"))
-            .context("Impossible d'importer llm_bridge.py")?;
+        let module = import_fresh_module(py, "llm_bridge")?;
 
         let structure = map_py_err(module.getattr("structure_course"))?;
         let result = map_py_err(structure.call1((raw_text,)))
@@ -58,10 +67,7 @@ pub fn structure_course(raw_text: &str) -> Result<String> {
 
 pub fn generate_pdf(markdown: &str) -> Result<String> {
     Python::with_gil(|py| {
-        setup_python_path(py)?;
-
-        let module = map_py_err(PyModule::import_bound(py, "pdf_generator"))
-            .context("Impossible d'importer pdf_generator.py")?;
+        let module = import_fresh_module(py, "pdf_generator")?;
 
         let generate = map_py_err(module.getattr("generate_pdf"))?;
         let result = map_py_err(generate.call1((markdown,)))
