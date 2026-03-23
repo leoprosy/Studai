@@ -10,7 +10,7 @@ use crate::ai;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TranscribeResponse {
     pub success: bool,
-    pub pdf_path: Option<String>,
+    pub markdown: Option<String>,
     pub error: Option<String>,
 }
 
@@ -28,10 +28,10 @@ pub async fn process_audio(
     bytes: Vec<u8>,
 ) -> Result<TranscribeResponse, String> {
     match run_pipeline(&app, &job_id, &filename, bytes).await {
-        Ok(pdf_path) => {
-            info!("Pipeline termine -> {}", pdf_path);
+        Ok(markdown) => {
+            info!("Pipeline termine");
             let _ = app.emit("progress", ProgressEvent { job_id: job_id.clone(), status: "done".into() });
-            Ok(TranscribeResponse { success: true, pdf_path: Some(pdf_path), error: None })
+            Ok(TranscribeResponse { success: true, markdown: Some(markdown), error: None })
         }
         Err(e) => {
             error!("Erreur pipeline : {:#}", e);
@@ -88,15 +88,6 @@ async fn run_pipeline(app: &AppHandle, job_id: &str, filename: &str, bytes: Vec<
         .context("Echec LLM")?;
     info!("Markdown : {} caracteres", markdown.len());
 
-    // Étape 3 — PDF (CPU-bound → spawn_blocking)
-    let _ = app.emit("progress", ProgressEvent { job_id: job_id.to_string(), status: "generating_pdf".into() });
-    info!("Generation PDF...");
-    let pdf_path = {
-        let out_dir = output_dir.to_str().unwrap().to_string();
-        tokio::task::spawn_blocking(move || ai::generate_pdf(&markdown, &out_dir))
-            .await.context("spawn_blocking pdf")??
-    };
-
     let _ = fs::remove_file(&audio_path_str).await;
-    Ok(pdf_path)
+    Ok(markdown)
 }

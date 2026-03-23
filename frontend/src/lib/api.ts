@@ -33,9 +33,6 @@ export async function transcribeAudio(
           case "structuring":
             onProgress(60, 100);
             break;
-          case "generating_pdf":
-            onProgress(90, 100);
-            break;
           case "done":
             onProgress(100, 100);
             break;

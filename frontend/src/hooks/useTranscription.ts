@@ -17,13 +17,13 @@ export function useTranscription() {
     step,
     audioFile,
     uploadProgress,
-    pdfPath,
+    markdown,
     error,
     setJobId,
     setAudioFile,
     setStep,
     setUploadProgress,
-    setPdfPath,
+    setMarkdown,
     setError,
     reset,
   } = useAppStore();
@@ -95,22 +95,22 @@ export function useTranscription() {
         },
       );
 
-      if (result.success && result.pdf_path) {
-        setPdfPath(result.pdf_path);
+      if (result.success && result.markdown) {
+        setMarkdown(result.markdown);
       } else {
         setError(result.error || "Erreur inconnue lors de la transcription.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inattendue");
     }
-  }, [audioFile, setJobId, setStep, setUploadProgress, setPdfPath, setError]);
+  }, [audioFile, setJobId, setStep, setUploadProgress, setMarkdown, setError]);
 
   return {
     jobId,
     step,
     audioFile,
     uploadProgress,
-    pdfPath,
+    markdown,
     error,
     selectFile,
     startTranscription,

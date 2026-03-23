@@ -7,7 +7,7 @@ interface AppState {
   step: PipelineStep;
   audioFile: AudioFileInfo | null;
   uploadProgress: number; // 0-100
-  pdfPath: string | null;
+  markdown: string | null;
   error: string | null;
 
   // ── Actions ──
@@ -15,7 +15,7 @@ interface AppState {
   setAudioFile: (file: AudioFileInfo | null) => void;
   setStep: (step: PipelineStep) => void;
   setUploadProgress: (progress: number) => void;
-  setPdfPath: (path: string) => void;
+  setMarkdown: (markdown: string) => void;
   setError: (error: string) => void;
   reset: () => void;
 }
@@ -25,7 +25,7 @@ const initialState = {
   step: "idle" as PipelineStep,
   audioFile: null as AudioFileInfo | null,
   uploadProgress: 0,
-  pdfPath: null as string | null,
+  markdown: null as string | null,
   error: null as string | null,
 };
 
@@ -40,7 +40,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   setUploadProgress: (progress) => set({ uploadProgress: progress }),
 
-  setPdfPath: (path) => set({ pdfPath: path, step: "done" }),
+  setMarkdown: (markdown) => set({ markdown, step: "done" }),
 
   setError: (error) => set({ error, step: "error" }),
 

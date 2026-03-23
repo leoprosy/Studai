@@ -24,11 +24,7 @@ export function usePipelineWebSocket(jobId?: string) {
             return;
           }
 
-          if (
-            ["transcribing", "structuring", "generating_pdf", "done"].includes(
-              msg,
-            )
-          ) {
+          if (["transcribing", "structuring", "done"].includes(msg)) {
             setStep(msg as PipelineStep);
           }
         },

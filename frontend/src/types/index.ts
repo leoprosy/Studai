@@ -8,14 +8,13 @@ export type PipelineStep =
   | "uploading"
   | "transcribing"
   | "structuring"
-  | "generating_pdf"
   | "done"
   | "error";
 
 /** Réponse du backend POST /transcribe */
 export interface TranscribeResponse {
   success: boolean;
-  pdf_path: string | null;
+  markdown: string | null;
   error: string | null;
 }
 

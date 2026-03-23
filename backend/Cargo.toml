@@ -25,5 +25,5 @@ futures-util = "0.3.32"
 whisper-rs = "0.11"
 symphonia = { version = "0.5", features = ["all"] }
 rubato = "0.14"
-printpdf = "0.7"
+
 chrono = "0.4"

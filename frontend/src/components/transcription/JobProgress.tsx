@@ -15,7 +15,6 @@ const STEPS: StepInfo[] = [
   { key: "uploading", label: "Upload du fichier", icon: "📤" },
   { key: "transcribing", label: "Transcription Whisper", icon: "🎙️" },
   { key: "structuring", label: "Structuration IA", icon: "🧠" },
-  { key: "generating_pdf", label: "Génération PDF", icon: "📄" },
 ];
 
 function getStepIndex(step: PipelineStep): number {
