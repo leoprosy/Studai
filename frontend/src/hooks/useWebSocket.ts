@@ -1,40 +1,46 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useAppStore } from "../store/appStore";
 import type { PipelineStep } from "../types";
+import { listen } from "@tauri-apps/api/event";
 
 export function usePipelineWebSocket(jobId?: string) {
-  const ws = useRef<WebSocket | null>(null);
   const { setStep, setError } = useAppStore();
 
   useEffect(() => {
     if (!jobId) return;
 
-    // Se connecter au backend
-    const url = `ws://127.0.0.1:8001/ws?job_id=${jobId}`;
-    ws.current = new WebSocket(url);
+    let unlisten: (() => void) | undefined;
 
-    ws.current.onmessage = (event) => {
-      const msg = event.data as string;
+    const setupListener = async () => {
+      unlisten = await listen<{ job_id: string; status: string }>(
+        "progress",
+        (event) => {
+          if (event.payload.job_id !== jobId) return;
 
-      if (msg.startsWith("error:")) {
-        setError(msg.replace("error:", ""));
-        return;
-      }
+          const msg = event.payload.status;
 
-      if (
-        ["transcribing", "structuring", "generating_pdf", "done"].includes(msg)
-      ) {
-        setStep(msg as PipelineStep);
-      }
+          if (msg === "error") {
+            setError("Une erreur s'est produite lors du traitement.");
+            return;
+          }
+
+          if (
+            ["transcribing", "structuring", "generating_pdf", "done"].includes(
+              msg,
+            )
+          ) {
+            setStep(msg as PipelineStep);
+          }
+        },
+      );
     };
 
-    ws.current.onerror = () => {
-      console.error("Erreur WebSocket !");
-      // On ne lève pas forcément d'erreur fatale ici, le fetch API principal gère déjà sa propre erreur
-    };
+    setupListener();
 
     return () => {
-      ws.current?.close();
+      if (unlisten) {
+        unlisten();
+      }
     };
   }, [jobId, setStep, setError]);
 }

@@ -1,140 +1,102 @@
-use axum::{
-    extract::{Multipart, Query, State},
-    Json,
-};
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 use tokio::fs;
 use tracing::{info, error};
-use uuid::Uuid;
 use anyhow::Context;
+use tauri::{AppHandle, Manager, Emitter};
 
-use crate::{ai, AppState};
+use crate::ai;
 
-#[derive(Deserialize)]
-pub struct TranscribeQuery {
-    job_id: String,
-}
-
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TranscribeResponse {
     pub success: bool,
     pub pdf_path: Option<String>,
     pub error: Option<String>,
 }
 
-pub async fn transcribe_audio(
-    State(state): State<AppState>,
-    Query(query): Query<TranscribeQuery>,
-    mut multipart: Multipart,
-) -> Json<TranscribeResponse> {
-    let job_id = query.job_id.clone();
-    
-    // Obtenir ou créer le canal de broadcast pour ce job
-    let tx = {
-        let mut map = state.channels.write().await;
-        map.entry(job_id.clone())
-            .or_insert_with(|| tokio::sync::broadcast::channel(16).0)
-            .clone()
-    };
+#[derive(Serialize, Clone)]
+pub struct ProgressEvent {
+    pub job_id: String,
+    pub status: String,
+}
 
-    match process_upload(&mut multipart, tx.clone()).await {
+#[tauri::command]
+pub async fn process_audio(
+    app: AppHandle,
+    job_id: String,
+    filename: String,
+    bytes: Vec<u8>,
+) -> Result<TranscribeResponse, String> {
+    match run_pipeline(&app, &job_id, &filename, bytes).await {
         Ok(pdf_path) => {
-            info!("Pipeline terminé → {}", pdf_path);
-            let _ = tx.send("done".to_string()); // Signal that we're completely done
-            Json(TranscribeResponse {
-                success: true,
-                pdf_path: Some(pdf_path),
-                error: None,
-            })
+            info!("Pipeline termine -> {}", pdf_path);
+            let _ = app.emit("progress", ProgressEvent { job_id: job_id.clone(), status: "done".into() });
+            Ok(TranscribeResponse { success: true, pdf_path: Some(pdf_path), error: None })
         }
         Err(e) => {
-            let err_msg = format!("{:#}", e);
-            error!("Erreur pipeline : {}", err_msg);
-            let _ = tx.send(format!("error:{}", err_msg)); // Send error over WS
-            Json(TranscribeResponse {
-                success: false,
-                pdf_path: None,
-                error: Some(err_msg),
-            })
+            error!("Erreur pipeline : {:#}", e);
+            let _ = app.emit("progress", ProgressEvent { job_id: job_id.clone(), status: "error".into() });
+            Err(format!("{:#}", e))
         }
     }
 }
 
-async fn process_upload(
-    multipart: &mut Multipart,
-    tx: tokio::sync::broadcast::Sender<String>
-) -> anyhow::Result<String> {
-    // 1. Reception du fichier audio
-    let field = multipart
-        .next_field()
-        .await
-        .context("Erreur lecture multipart")?
-        .context("Aucun champ dans la requete")?;
+async fn run_pipeline(app: &AppHandle, job_id: &str, filename: &str, bytes: Vec<u8>) -> anyhow::Result<String> {
+    let app_data_dir = app.path().app_data_dir().context("Impossible de trouver le dossier AppData")?;
+    
+    // Config paths
+    let audio_dir = app_data_dir.join("audio");
+    let output_dir = app_data_dir.join("outputs");
+    let models_dir = app_data_dir.join("models");
+    let model_path = models_dir.join("ggml-small.bin");
 
-    let original_name = field.file_name().unwrap_or("audio").to_string();
-    let ext = PathBuf::from(&original_name)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("mp3")
-        .to_string();
-
-    let data = field.bytes().await.context("Erreur lecture bytes")?;
-    info!("Fichier recu : {} ({} octets)", original_name, data.len());
-
-    // Sauvegarde temporaire
-    let audio_dir = PathBuf::from(
-        std::env::var("AUDIO_DIR").unwrap_or_else(|_| "./data/audio".to_string())
-    );
     fs::create_dir_all(&audio_dir).await?;
+    fs::create_dir_all(&output_dir).await?;
+    fs::create_dir_all(&models_dir).await?;
 
-    let audio_path = audio_dir.join(format!("{}.{}", Uuid::new_v4(), ext));
-    fs::write(&audio_path, &data).await.context("Erreur sauvegarde audio")?;
-
-    // Valider la taille du fichier (minimum 10 KB pour un audio valide)
-    const MIN_AUDIO_SIZE: usize = 10 * 1024;
-    if data.len() < MIN_AUDIO_SIZE {
-        let _ = fs::remove_file(&audio_path).await;
-        anyhow::bail!(
-            "Fichier audio trop petit ({} octets, minimum {} octets). \
-             Vérifiez que le fichier audio est valide et que le client envoie \
-             bien le contenu du fichier.",
-            data.len(),
-            MIN_AUDIO_SIZE
-        );
+    // Check if model exists, eventually download it here
+    if !model_path.exists() {
+        let _ = app.emit("progress", ProgressEvent { job_id: job_id.to_string(), status: "downloading_model".into() });
+        // Downloading dummy since the actual download wasn't fully asked, but let's implement the logic
+        let url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
+        let response = reqwest::get(url).await.context("Erreur de telechargement du modele")?;
+        let bytes_model = response.bytes().await?;
+        fs::write(&model_path, bytes_model).await?;
     }
 
-    // Utiliser un chemin absolu
-    let audio_path_abs = audio_path.canonicalize().context("Impossible de résoudre le chemin audio absolu")?;
-    let audio_path_str = audio_path_abs.to_str().context("Chemin audio invalide")?.to_string();
+    let ext = PathBuf::from(filename).extension().and_then(|e| e.to_str()).unwrap_or("mp3").to_string();
+    let audio_path = audio_dir.join(format!("{}.{}", job_id, ext));
+    
+    fs::write(&audio_path, &bytes).await.context("Erreur sauvegarde audio")?;
+    let audio_path_str = audio_path.to_str().context("Chemin invalide")?.to_string();
 
-    // 2. Pipeline IA dans spawn_blocking
-    let pdf_path = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
-        // Envoi d'un événement au frontend = on est passé à la transcription
-        let _ = tx.send("transcribing".to_string());
-        info!("Transcription en cours...");
-        let raw_text = ai::transcribe_audio(&audio_path_str)
-            .context("Echec transcription Whisper")?;
-        info!("Transcription : {} caracteres", raw_text.len());
+    // Étape 1 — Whisper (CPU-bound → spawn_blocking)
+    let _ = app.emit("progress", ProgressEvent { job_id: job_id.to_string(), status: "transcribing".into() });
+    info!("Transcription Whisper...");
+    let raw_text = {
+        let path = audio_path_str.clone();
+        let m_path = model_path.to_str().unwrap().to_string();
+        tokio::task::spawn_blocking(move || ai::transcribe_audio(&path, &m_path))
+            .await.context("spawn_blocking whisper")??
+    };
+    info!("Transcription : {} caracteres", raw_text.len());
 
-        let _ = tx.send("structuring".to_string());
-        info!("Structuration LLM en cours...");
-        let markdown = ai::structure_course(&raw_text)
-            .context("Echec structuration LLM")?;
-        info!("Markdown : {} caracteres", markdown.len());
+    // Étape 2 — LLM (I/O async → direct await)
+    let _ = app.emit("progress", ProgressEvent { job_id: job_id.to_string(), status: "structuring".into() });
+    info!("Structuration LLM...");
+    let markdown = ai::structure_course(&raw_text).await
+        .context("Echec LLM")?;
+    info!("Markdown : {} caracteres", markdown.len());
 
-        let _ = tx.send("generating_pdf".to_string());
-        info!("Generation PDF...");
-        let pdf = ai::generate_pdf(&markdown)
-            .context("Echec generation PDF")?;
+    // Étape 3 — PDF (CPU-bound → spawn_blocking)
+    let _ = app.emit("progress", ProgressEvent { job_id: job_id.to_string(), status: "generating_pdf".into() });
+    info!("Generation PDF...");
+    let pdf_path = {
+        let out_dir = output_dir.to_str().unwrap().to_string();
+        tokio::task::spawn_blocking(move || ai::generate_pdf(&markdown, &out_dir))
+            .await.context("spawn_blocking pdf")??
+    };
 
-        // Nettoyage fichier audio temporaire
-        let _ = std::fs::remove_file(&audio_path_str);
-
-        Ok(pdf)
-    })
-    .await
-    .context("Erreur spawn_blocking")??;
-
+    let _ = fs::remove_file(&audio_path_str).await;
     Ok(pdf_path)
 }

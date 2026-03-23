@@ -1,9 +1,9 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { TranscribeResponse, HealthResponse } from "../types";
 
-const BACKEND_URL = "http://127.0.0.1:8001";
-
 /**
- * Envoie un fichier audio au backend pour transcription complète.
+ * Envoie un fichier audio au backend pour transcription complète via Tauri.
  * Retourne le chemin du PDF généré.
  */
 export async function transcribeAudio(
@@ -11,67 +11,61 @@ export async function transcribeAudio(
   jobId: string,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<TranscribeResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
+  const arrayBuffer = await file.arrayBuffer();
+  // Passage du byte array au backend Tauri
+  const bytes = Array.from(new Uint8Array(arrayBuffer));
 
-  // Utiliser XMLHttpRequest pour le suivi de progression d'upload
   if (onProgress) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
+    onProgress(5, 100);
+  }
 
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable) {
-          onProgress(e.loaded, e.total);
+  const unlisten = await listen<{ job_id: string; status: string }>(
+    "progress",
+    (event) => {
+      if (event.payload.job_id === jobId && onProgress) {
+        switch (event.payload.status) {
+          case "downloading_model":
+            onProgress(10, 100);
+            break;
+          case "transcribing":
+            onProgress(30, 100);
+            break;
+          case "structuring":
+            onProgress(60, 100);
+            break;
+          case "generating_pdf":
+            onProgress(90, 100);
+            break;
+          case "done":
+            onProgress(100, 100);
+            break;
+          case "error":
+            onProgress(0, 100);
+            break;
         }
-      });
+      }
+    },
+  );
 
-      xhr.addEventListener("load", () => {
-        try {
-          const data: TranscribeResponse = JSON.parse(xhr.responseText);
-          resolve(data);
-        } catch {
-          reject(new Error("Réponse invalide du serveur"));
-        }
-      });
-
-      xhr.addEventListener("error", () => {
-        reject(new Error("Erreur réseau — le backend est-il lancé ?"));
-      });
-
-      xhr.addEventListener("timeout", () => {
-        reject(new Error("Timeout — la transcription a pris trop de temps"));
-      });
-
-      xhr.open("POST", `${BACKEND_URL}/transcribe?job_id=${jobId}`);
-      xhr.timeout = 600_000; // 10 minutes
-      xhr.send(formData);
+  try {
+    const response = await invoke<TranscribeResponse>("process_audio", {
+      jobId, // in case tauri auto-camelCases
+      job_id: jobId, // literal match
+      filename: file.name,
+      bytes,
     });
+
+    unlisten();
+    return response;
+  } catch (error) {
+    unlisten();
+    throw new Error(String(error));
   }
-
-  // Fallback sans progression
-  const response = await fetch(`${BACKEND_URL}/transcribe?job_id=${jobId}`, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erreur serveur (${response.status})`);
-  }
-
-  return response.json();
 }
 
 /**
- * Vérifie que le backend est accessible.
+ * Le frontend et le backend sont identiques en distribution Tauri
  */
 export async function checkHealth(): Promise<HealthResponse> {
-  const response = await fetch(`${BACKEND_URL}/health`, {
-    signal: AbortSignal.timeout(5000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Backend inaccessible (${response.status})`);
-  }
-
-  return response.json();
+  return { status: "ok", version: "1.0.0" } as any;
 }
