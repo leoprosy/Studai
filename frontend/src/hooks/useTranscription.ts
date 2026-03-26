@@ -18,12 +18,14 @@ export function useTranscription() {
     audioFile,
     uploadProgress,
     markdown,
+    currentTranscriptionSegment,
     error,
     setJobId,
     setAudioFile,
     setStep,
     setUploadProgress,
     setMarkdown,
+    setCurrentTranscriptionSegment,
     setError,
     reset,
   } = useAppStore();
@@ -81,6 +83,7 @@ export function useTranscription() {
       // Phase 1 : Upload
       setStep("uploading");
       setUploadProgress(0);
+      useAppStore.setState({ currentTranscriptionSegment: null });
 
       const result = await transcribeAudio(
         audioFile.file,
@@ -88,10 +91,9 @@ export function useTranscription() {
         (loaded, total) => {
           const pct = Math.round((loaded / total) * 100);
           setUploadProgress(pct);
-          if (pct >= 100 && step === "uploading") {
-            // Seuls les WS dictent "transcribing" désormais
-            // Garder uploading tant que le websocket n'a pas reçu le top "transcribing" sinon ça va glitcher
-          }
+        },
+        (segment) => {
+          setCurrentTranscriptionSegment(segment);
         },
       );
 
@@ -103,7 +105,15 @@ export function useTranscription() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inattendue");
     }
-  }, [audioFile, setJobId, setStep, setUploadProgress, setMarkdown, setError]);
+  }, [
+    audioFile,
+    setJobId,
+    setStep,
+    setUploadProgress,
+    setMarkdown,
+    setCurrentTranscriptionSegment,
+    setError,
+  ]);
 
   return {
     jobId,
@@ -111,6 +121,7 @@ export function useTranscription() {
     audioFile,
     uploadProgress,
     markdown,
+    currentTranscriptionSegment,
     error,
     selectFile,
     startTranscription,

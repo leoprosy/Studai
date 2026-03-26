@@ -1,8 +1,45 @@
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
 use anyhow::{Context, Result};
 use std::path::Path;
+use crate::ai::TranscriptionSegment;
 
-pub fn transcribe(audio_path: &str, model_path: &str) -> Result<String> {
+struct StreamingContext {
+    sender: tokio::sync::mpsc::UnboundedSender<TranscriptionSegment>,
+}
+
+unsafe extern "C" fn segment_callback(
+    _ctx: *mut whisper_rs::WhisperSysContext,
+    state: *mut whisper_rs::WhisperSysState,
+    n_new: std::os::raw::c_int,
+    user_data: *mut std::ffi::c_void,
+) {
+    if user_data.is_null() {
+        return;
+    }
+    let ctx = &mut *(user_data as *mut StreamingContext);
+    let n_segments = whisper_rs::whisper_rs_sys::whisper_full_n_segments_from_state(state);
+    
+    for i in (n_segments - n_new)..n_segments {
+        let text_ptr = whisper_rs::whisper_rs_sys::whisper_full_get_segment_text_from_state(state, i);
+        let t0 = whisper_rs::whisper_rs_sys::whisper_full_get_segment_t0_from_state(state, i);
+        let t1 = whisper_rs::whisper_rs_sys::whisper_full_get_segment_t1_from_state(state, i);
+        
+        if !text_ptr.is_null() {
+            let text = std::ffi::CStr::from_ptr(text_ptr).to_string_lossy().into_owned();
+            let _ = ctx.sender.send(TranscriptionSegment {
+                text,
+                start: t0 * 10, // deciseconds to ms
+                end: t1 * 10,
+            });
+        }
+    }
+}
+
+pub fn transcribe(
+    audio_path: &str, 
+    model_path: &str, 
+    sender: Option<tokio::sync::mpsc::UnboundedSender<TranscriptionSegment>>
+) -> Result<String> {
     // Charge le modèle GGML
     let ctx = WhisperContext::new_with_params(
         model_path,
@@ -18,6 +55,17 @@ pub fn transcribe(audio_path: &str, model_path: &str) -> Result<String> {
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_special(false);
+
+    let mut streaming_ctx = sender.map(|s| StreamingContext {
+        sender: s,
+    });
+
+    if let Some(ref mut s_ctx) = streaming_ctx {
+        unsafe {
+            params.set_new_segment_callback(Some(segment_callback));
+            params.set_new_segment_callback_user_data(s_ctx as *mut _ as *mut std::ffi::c_void);
+        }
+    }
 
     // Décode l'audio en PCM f32 mono 16kHz (requis par Whisper)
     let pcm = decode_audio_to_pcm(audio_path)

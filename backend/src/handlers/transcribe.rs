@@ -20,6 +20,14 @@ pub struct ProgressEvent {
     pub status: String,
 }
 
+#[derive(Serialize, Clone)]
+pub struct TranscriptionSegmentEvent {
+    pub job_id: String,
+    pub text: String,
+    pub start: i64,
+    pub end: i64,
+}
+
 #[tauri::command]
 pub async fn process_audio(
     app: AppHandle,
@@ -41,7 +49,12 @@ pub async fn process_audio(
     }
 }
 
-async fn run_pipeline(app: &AppHandle, job_id: &str, filename: &str, bytes: Vec<u8>) -> anyhow::Result<String> {
+async fn run_pipeline(
+    app: &AppHandle, 
+    job_id: &str, 
+    filename: &str, 
+    bytes: Vec<u8>
+) -> anyhow::Result<String> {
     let app_data_dir = app.path().app_data_dir().context("Impossible de trouver le dossier AppData")?;
     
     // Config paths
@@ -73,12 +86,28 @@ async fn run_pipeline(app: &AppHandle, job_id: &str, filename: &str, bytes: Vec<
     // Étape 1 — Whisper (CPU-bound → spawn_blocking)
     let _ = app.emit("progress", ProgressEvent { job_id: job_id.to_string(), status: "transcribing".into() });
     info!("Transcription Whisper...");
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<ai::TranscriptionSegment>();
+    let app_clone = app.clone();
+    let job_id_clone = job_id.to_string();
+    let stream_task = tokio::spawn(async move {
+        while let Some(segment) = rx.recv().await {
+            let _ = app_clone.emit("transcription_segment", TranscriptionSegmentEvent {
+                job_id: job_id_clone.clone(),
+                text: segment.text,
+                start: segment.start,
+                end: segment.end,
+            });
+        }
+    });
+
     let raw_text = {
         let path = audio_path_str.clone();
         let m_path = model_path.to_str().unwrap().to_string();
-        tokio::task::spawn_blocking(move || ai::transcribe_audio(&path, &m_path))
+        tokio::task::spawn_blocking(move || ai::transcribe_audio(&path, &m_path, Some(tx)))
             .await.context("spawn_blocking whisper")??
     };
+    let _ = stream_task.await;
     info!("Transcription : {} caracteres", raw_text.len());
 
     // Étape 2 — LLM (I/O async → direct await)

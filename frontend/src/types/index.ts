@@ -53,6 +53,12 @@ export const ACCEPTED_EXTENSIONS = [
 /** Taille max d'upload (500 MB) */
 export const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
+export interface TranscriptionSegment {
+  text: string;
+  start: number;
+  end: number;
+}
+
 /** Infos sur le fichier audio sélectionné */
 export interface AudioFileInfo {
   file: File;

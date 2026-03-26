@@ -5,75 +5,58 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
-          950: "#1e1b4b",
+        bg: {
+          primary: "#0f0f0f",
+          secondary: "#161616",
+          tertiary: "#1e1e1e",
+          elevated: "#242424",
         },
-        surface: {
-          50: "#f8fafc",
-          100: "#f1f5f9",
-          200: "#e2e8f0",
-          300: "#cbd5e1",
-          400: "#94a3b8",
-          500: "#64748b",
-          600: "#475569",
-          700: "#334155",
-          800: "#1e293b",
-          900: "#0f172a",
-          950: "#020617",
+        border: {
+          subtle: "#1e1e1e",
+          default: "#2a2a2a",
+          strong: "#3a3a3a",
+        },
+        accent: {
+          DEFAULT: "#f97316",
+          hover: "#ea6c0a",
+          subtle: "#1a0f00",
+        },
+        step: {
+          whisper: "#a78bfa",
+          llm: "#f97316",
+          pdf: "#22c55e",
         },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
-        mono: ["JetBrains Mono", "Fira Code", "monospace"],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        mono: ["IBM Plex Mono", "Fira Code", "monospace"],
+      },
+      borderRadius: {
+        sm: "4px",
+        md: "8px",
+        lg: "10px",
+        xl: "16px",
       },
       animation: {
-        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        float: "float 6s ease-in-out infinite",
-        glow: "glow 2s ease-in-out infinite alternate",
-        "slide-up": "slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
-        "slide-down": "slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
-        "fade-in": "fadeIn 0.4s ease-out",
-        "scale-in": "scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
-        "spin-slow": "spin 3s linear infinite",
+        "pulse-slow": "pulse 1.5s ease-in-out infinite",
+        shimmer: "shimmer 2s infinite",
+        "fade-up": "fade-up 0.25s ease",
+        "pop-in": "pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
       },
       keyframes: {
-        float: {
-          "0%, 100%": { transform: "translateY(0px)" },
-          "50%": { transform: "translateY(-10px)" },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
         },
-        glow: {
-          "0%": { boxShadow: "0 0 20px rgba(99, 102, 241, 0.15)" },
-          "100%": { boxShadow: "0 0 40px rgba(99, 102, 241, 0.35)" },
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(12px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
         },
-        slideUp: {
-          "0%": { opacity: "0", transform: "translateY(20px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
+        "pop-in": {
+          "0%": { transform: "scale(0.92)", opacity: "0" },
+          "60%": { transform: "scale(1.02)" },
+          "100%": { transform: "scale(1)", opacity: "1" },
         },
-        slideDown: {
-          "0%": { opacity: "0", transform: "translateY(-10px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
-        fadeIn: {
-          "0%": { opacity: "0" },
-          "100%": { opacity: "1" },
-        },
-        scaleIn: {
-          "0%": { opacity: "0", transform: "scale(0.95)" },
-          "100%": { opacity: "1", transform: "scale(1)" },
-        },
-      },
-      backdropBlur: {
-        xs: "2px",
       },
     },
   },

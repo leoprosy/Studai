@@ -1,6 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { TranscribeResponse, HealthResponse } from "../types";
+import type {
+  TranscribeResponse,
+  HealthResponse,
+  TranscriptionSegment,
+} from "../types";
 
 /**
  * Envoie un fichier audio au backend pour transcription complète via Tauri.
@@ -10,6 +14,7 @@ export async function transcribeAudio(
   file: File,
   jobId: string,
   onProgress?: (loaded: number, total: number) => void,
+  onSegment?: (segment: TranscriptionSegment) => void,
 ): Promise<TranscribeResponse> {
   const arrayBuffer = await file.arrayBuffer();
   // Passage du byte array au backend Tauri
@@ -19,7 +24,7 @@ export async function transcribeAudio(
     onProgress(5, 100);
   }
 
-  const unlisten = await listen<{ job_id: string; status: string }>(
+  const unlistenProgress = await listen<{ job_id: string; status: string }>(
     "progress",
     (event) => {
       if (event.payload.job_id === jobId && onProgress) {
@@ -44,6 +49,18 @@ export async function transcribeAudio(
     },
   );
 
+  const unlistenSegment = await listen<
+    TranscriptionSegment & { job_id: string }
+  >("transcription_segment", (event) => {
+    if (event.payload.job_id === jobId && onSegment) {
+      onSegment({
+        text: event.payload.text,
+        start: event.payload.start,
+        end: event.payload.end,
+      });
+    }
+  });
+
   try {
     const response = await invoke<TranscribeResponse>("process_audio", {
       jobId, // in case tauri auto-camelCases
@@ -52,10 +69,12 @@ export async function transcribeAudio(
       bytes,
     });
 
-    unlisten();
+    unlistenProgress();
+    unlistenSegment();
     return response;
   } catch (error) {
-    unlisten();
+    unlistenProgress();
+    unlistenSegment();
     throw new Error(String(error));
   }
 }
